@@ -104,3 +104,59 @@ The system integrates with Prometheus for metrics collection, Docker for log fet
    Check available Gemini models:
    ```bash
    python list_models
+
+   heck Model CapabilitiesView supported methods for Gemini models:
+
+python check_models.py
+
+Security Notes
+
+
+
+
+
+Hardcoded Credentials: The Gemini API key and Slack webhook URL are hardcoded in config.py, main_agent.py, dashboard.py, list_models.py, and check_models.py. In production, use a secure method (e.g., a secrets manager) to manage these credentials.
+
+
+
+Docker Commands: Ensure the stress-test container exists and is accessible. Secure Docker commands to prevent unauthorized access.
+
+
+
+Prometheus: The monitor.py script disables SSL verification for testing. In production, enable SSL and secure the Prometheus endpoint.
+
+Future Improvements
+
+
+
+
+
+Enhance error handling for network failures or missing containers.
+
+
+
+Implement log rotation for logs.txt and incidents.db.
+
+
+
+Support multiple containers for log fetching and remediation.
+
+
+
+Add more remediation strategies (e.g., scaling resources, killing processes).
+
+
+
+Enhance the dashboard with charts for historical metrics.
+
+
+
+Integrate additional monitoring tools (e.g., Grafana).
+
+Contributing
+
+Contributions are welcome! Please submit a pull request or open an issue for bugs, features, or improvements.
+
+License
+
+This project is licensed under the MIT License.
