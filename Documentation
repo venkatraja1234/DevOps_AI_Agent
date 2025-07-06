@@ -1,0 +1,266 @@
+# DevOps AI Agent Documentation
+
+## Introduction
+The DevOps AI Agent is a Python-based system designed to enhance DevOps workflows by monitoring system metrics, detecting performance issues (e.g., CPU spikes), analyzing logs with Google’s Gemini AI, performing automated remediation, logging incidents, and sending notifications via Slack. It includes a Streamlit dashboard for real-time visualization of metrics, logs, AI-driven analysis, and manual remediation controls.
+
+The system integrates with Prometheus for metrics collection, Docker for log fetching and container management, SQLite for incident logging, and Slack for notifications. It’s built to help DevOps teams proactively manage system health, reduce manual toil, and respond quickly to performance issues.
+
+This documentation provides a detailed guide to the project’s architecture, setup, usage, and maintenance, assuming the codebase matches the provided files.
+
+## System Architecture
+The DevOps AI Agent operates as a modular system with the following components:
+
+1. **Monitoring (`monitor.py`)**:
+   - Connects to a Prometheus server (`http://localhost:9090`) to collect system metrics (CPU, memory, disk, network usage).
+   - Detects CPU spikes based on a configurable threshold (80% by default, defined in `config.py`).
+   - Uses Prometheus queries to fetch real-time data via the `prometheus_api_client`.
+
+2. **Log Fetching (`log_fetcher.py`)**:
+   - Retrieves logs from the `stress-test` Docker container using `docker logs --tail 100`.
+   - Used by `main_controller.py` and `main_agent.py` when a CPU spike is detected.
+
+3. **Log Analysis (`analyzer.py`)**:
+   - Analyzes logs using Google’s Gemini AI (`gemini-1.5-flash` model).
+   - Identifies potential causes of high CPU usage (e.g., infinite loops, memory leaks) based on a predefined prompt.
+
+4. **Remediation (`remediation.py`)**:
+   - Performs automated actions, such as restarting the `stress-test` Docker container, when specific issues (e.g., infinite loops, memory leaks) are detected in the log analysis.
+
+5. **Incident Logging (`incident_logger.py`)**:
+   - Stores incident details (timestamp, CPU usage, analysis, action) in a SQLite database (`incidents.db`).
+   - Creates a table named `incidents` if it doesn’t exist.
+
+6. **Notifications (`notifier.py`)**:
+   - Sends alerts to a Slack webhook with details about CPU spikes, analysis, and actions taken.
+
+7. **Orchestration**:
+   - `main_controller.py`: Runs continuously, monitoring metrics every 60 seconds, detecting CPU spikes, triggering log analysis, remediation, incident logging, and notifications. Waits 300 seconds after handling a spike to avoid rapid looping.
+   - `main_agent.py`: A single-run version for testing, simulating a CPU spike and performing the same workflow as `main_controller.py`.
+
+8. **Dashboard (`dashboard.py`)**:
+   - A Streamlit-based web interface (`http://localhost:8501`) with four tabs:
+     - **System Metrics**: Displays real-time CPU, memory, disk, and network usage.
+     - **Logs**: Shows the latest 50 lines of `/var/log/syslog`.
+     - **Analysis**: Runs Gemini AI analysis on system logs.
+     - **Remediation**: Allows manual restarting of a specified Docker container.
+
+9. **Utility Scripts**:
+   - `list_models.py`: Lists available Gemini models.
+   - `check_models.py`: Lists Gemini models and their supported methods.
+   - `config.py`: Stores configuration variables (Prometheus URL, CPU threshold, container name, Gemini API key, Slack webhook URL).
+   - `logs.txt`: A placeholder file for storing logs (currently empty).
+
+10. **Dependencies (`requirements.txt`)**:
+    - Requires `google-generativeai` for Gemini AI integration.
+    - Additional dependencies (e.g., `prometheus_api_client`, `streamlit`, `requests`) are assumed based on functionality but not listed in the provided `requirements.txt`.
+
+## Prerequisites
+To run the DevOps AI Agent, ensure the following are installed and configured:
+
+- **Python**: Version 3.8 or higher.
+- **Docker**: A running `stress-test` container with logs accessible at `/app/app.log`.
+- **Prometheus**: A server running at `http://localhost:9090` with Node Exporter configured to collect system metrics (CPU, memory, disk, network).
+- **SQLite**: Included with Python (no separate installation needed).
+- **Slack Webhook**: A valid webhook URL for sending notifications.
+- **Google Gemini API Key**: Required for log analysis.
+- **Dependencies**:
+  - `google-generativeai` (listed in `requirements.txt`).
+  - Install additional packages:
+    ```bash
+    pip install prometheus_api_client streamlit requests
+    ```
+
+## Installation
+1. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/venkatraja1234/DevOps_AI_Agent
+   cd DevOps_AI_Agent
+   ```
+
+2. **Set Up a Virtual Environment**:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install Dependencies**:
+   Update `requirements.txt` to include all necessary packages:
+   ```text
+   google-generativeai
+   prometheus_api_client
+   streamlit
+   requests
+   ```
+   Then install:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Configure Sensitive Data**:
+   Edit `config.py` to include your Gemini API key and Slack webhook URL:
+   ```python
+   PROMETHEUS_URL = "http://localhost:9090"
+   CPU_THRESHOLD = 80.0
+   CONTAINER_NAME = "stress-test"
+   SLACK_WEBHOOK_URL = "your_slack_webhook_url"
+   GEMINI_API_KEY = "your_gemini_api_key"
+   ```
+   **Security Warning**: Hardcoding credentials in `config.py`, `main_agent.py`, `dashboard.py`, `list_models.py`, and `check_models.py` is insecure. In production, use a secrets manager (e.g., AWS Secrets Manager, HashiCorp Vault) or environment variables.
+
+5. **Set Up Prometheus**:
+   - Ensure a Prometheus server is running at `http://localhost:9090`.
+   - Configure Node Exporter to collect system metrics.
+   - Verify Prometheus is scraping metrics with queries like:
+     ```promql
+     100 - (avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100)
+     ```
+
+6. **Set Up Docker**:
+   - Ensure the `stress-test` container is running:
+     ```bash
+     docker ps
+     ```
+   - Verify logs are accessible:
+     ```bash
+     docker logs stress-test
+     ```
+
+7. **Initialize SQLite Database**:
+   - The `incident_logger.py` script automatically creates `incidents.db` and the `incidents` table on first use.
+
+## Usage
+The DevOps AI Agent can be run in three primary modes: continuous monitoring, single-run testing, and dashboard interaction.
+
+### 1. Continuous Monitoring (`main_controller.py`)
+Run the main agent to monitor system metrics and handle CPU spikes:
+```bash
+python main_controller.py
+```
+- **Behavior**:
+  - Checks CPU, memory, disk, and network usage every 60 seconds.
+  - If CPU usage exceeds 80%:
+    - Fetches logs from the `stress-test` container.
+    - Analyzes logs with Gemini AI for issues like infinite loops or memory leaks.
+    - Restarts the container if specific issues are detected; otherwise, flags for manual review.
+    - Logs the incident to `incidents.db`.
+    - Sends a Slack notification with analysis and action details.
+  - Waits 300 seconds after handling a spike to avoid rapid loops.
+- **Output**:
+  - Console logs with metrics, analysis, and action status.
+  - SQLite database (`incidents.db`) with incident records.
+  - Slack notifications with formatted messages.
+
+### 2. Single-Run Testing (`main_agent.py`)
+Test the agent with a simulated CPU spike:
+```bash
+python main_agent.py
+```
+- **Behavior**:
+  - Simulates a CPU spike (always returns `True` for `check_cpu_spike`).
+  - Fetches logs, analyzes them with Gemini AI, performs remediation if needed, and sends a Slack notification.
+  - Does not loop; runs once and exits.
+- **Use Case**:
+  - Ideal for testing the workflow without continuous monitoring.
+
+### 3. Streamlit Dashboard (`dashboard.py`)
+Launch the web-based dashboard:
+```bash
+streamlit run dashboard.py
+```
+- **Access**: Open `http://localhost:8501` in a browser.
+- **Tabs**:
+  - **System Metrics**: Displays real-time CPU, memory, disk, and network usage.
+  - **Logs**: Shows the latest 50 lines of `/var/log/syslog`.
+  - **Analysis**: Triggers Gemini AI analysis of system logs with a button.
+  - **Remediation**: Allows manual entry of a Docker container name to restart.
+- **Use Case**: Provides a user-friendly interface for monitoring and manual intervention.
+
+### 4. Utility Scripts
+- **List Gemini Models**:
+  ```bash
+  python list_models.py
+  ```
+  Outputs available Gemini models (e.g., `gemini-1.5-flash`).
+- **Check Model Capabilities**:
+  ```bash
+  python check_models.py
+  ```
+  Lists Gemini models and their supported methods (e.g., content generation).
+
+## Configuration
+The `config.py` file contains key settings:
+```python
+PROMETHEUS_URL = "http://localhost:9090"  # Prometheus server URL
+CPU_THRESHOLD = 80.0                      # CPU usage threshold for spike detection
+CONTAINER_NAME = "stress-test"            # Docker container to monitor
+SLACK_WEBHOOK_URL = "your_slack_webhook_url"  # Slack notification endpoint
+GEMINI_API_KEY = "your_gemini_api_key"    # Gemini AI API key
+```
+- Update `PROMETHEUS_URL` if your Prometheus server runs on a different host/port.
+- Adjust `CPU_THRESHOLD` to change spike sensitivity.
+- Update `CONTAINER_NAME` for a different Docker container.
+- Replace `SLACK_WEBHOOK_URL` and `GEMINI_API_KEY` with your credentials.
+
+## Security Considerations
+- **Hardcoded Credentials**: The Gemini API key and Slack webhook URL are hardcoded in multiple files (`config.py`, `main_agent.py`, `dashboard.py`, `list_models.py`, `check_models.py`). In production:
+  - Use a secrets manager or environment variables:
+    ```bash
+    export GEMINI_API_KEY="your_gemini_api_key"
+    export SLACK_WEBHOOK_URL="your_slack_webhook_url"
+    ```
+    Update scripts to use `os.getenv()`:
+    ```python
+    import os
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
+    ```
+- **Docker Security**: Ensure the user running the scripts has Docker permissions. Secure the Docker daemon to prevent unauthorized access.
+- **Prometheus**: The `monitor.py` script disables SSL verification (`disable_ssl=True`). In production, enable SSL and use secure authentication.
+- **SQLite**: The `incidents.db` file is stored locally. Secure its storage location and consider encryption for sensitive data.
+
+## Troubleshooting
+- **Prometheus Errors**:
+  - If `get_cpu_usage` returns 0.0, verify the Prometheus server is running and Node Exporter is configured.
+  - Check the query in `monitor.py` matches your Prometheus setup.
+- **Docker Errors**:
+  - Ensure the `stress-test` container exists (`docker ps`).
+  - Verify log paths (`/app/app.log` or `docker logs` output).
+- **Gemini AI Errors**:
+  - Check the API key in `config.py` is valid.
+  - Ensure network access to Google’s API endpoints.
+- **Slack Notification Failures**:
+  - Verify the webhook URL is correct and active.
+  - Check `notifier.py` logs for HTTP status codes or errors.
+- **Streamlit Issues**:
+  - Ensure `streamlit` is installed (`pip install streamlit`).
+  - Check the console for errors if the dashboard doesn’t load.
+
+## Future Improvements
+- **Enhanced Error Handling**: Add robust error handling for network failures, missing containers, or API errors.
+- **Log Rotation**: Implement rotation for `logs.txt` and `incidents.db` to manage storage.
+- **Multi-Container Support**: Extend `log_fetcher.py` and `remediation.py` to handle multiple containers.
+- **Advanced Remediation**: Add strategies like scaling resources or killing specific processes.
+- **Dashboard Enhancements**: Include historical metrics charts using Chart.js or similar.
+- **Integration with Other Tools**: Add support for Grafana, Jenkins, or other DevOps platforms.
+- **Secure Credentials**: Integrate a secrets manager for API keys and webhooks.
+
+## Contributing
+Contributions are welcome! To contribute:
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feature/your-feature`).
+3. Commit changes (`git commit -m "Add your feature"`).
+4. Push to the branch (`git push origin feature/your-feature`).
+5. Open a pull request on GitHub.
+
+Report bugs or suggest features via GitHub Issues.
+
+## License
+This project is licensed under the MIT License. See the `LICENSE` file in the repository for details.
+
+## References
+- Prometheus: [https://prometheus.io/docs/](https://prometheus.io/docs/)
+- Node Exporter: [https://github.com/prometheus/node_exporter](https://github.com/prometheus/node_exporter)
+- Google Gemini AI: [https://cloud.google.com/ai](https://cloud.google.com/ai)
+- Streamlit: [https://docs.streamlit.io/](https://docs.streamlit.io/)
+- Docker: [https://docs.docker.com/](https://docs.docker.com/)
+- Slack Webhooks: [https://api.slack.com/messaging/webhooks](https://api.slack.com/messaging/webhooks)
