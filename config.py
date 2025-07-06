@@ -1,0 +1,6 @@
+PROMETHEUS_URL = "http://localhost:9090"
+CPU_THRESHOLD = 80.0
+CONTAINER_NAME = "stress-test"
+SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
+GEMINI_API_KEY = "AIzaSyCajPD9uYRvQA4Q_oJX6hqKbu5OJK1cJ2g"
+
