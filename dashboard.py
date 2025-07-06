@@ -3,7 +3,6 @@ import subprocess
 import google.generativeai as genai
 from monitor import get_cpu_usage, get_memory_usage, get_disk_usage, get_network_rx
 
-# ✅ Configure Gemini API Key
 genai.configure(api_key="AIzaSyCajPD9uYRvQA4Q_oJX6hqKbu5OJK1cJ2g")  # Use .env in production
 model = genai.GenerativeModel("gemini-1.5-flash")
 
@@ -13,8 +12,6 @@ st.title("🚀 DevOps AI Agent Dashboard")
 st.markdown("Real-time Monitoring | LLM Log Analysis | Auto Remediation")
 
 tab1, tab2, tab3, tab4 = st.tabs(["📊 System Metrics", "📋 Logs", "🤖 Analysis", "🛠 Remediation"])
-
-# 📊 SYSTEM METRICS
 with tab1:
     st.subheader("Live System Metrics")
 
@@ -29,13 +26,10 @@ with tab1:
     col3.metric("Disk Usage", f"{disk:.2f}%")
     col4.metric("Network RX", f"{net:.2f} MB/s")
 
-# 📋 LOG VIEWER
 with tab2:
     st.subheader("Latest System Logs")
     logs = subprocess.getoutput("tail -n 50 /var/log/syslog")
     st.text_area("System Logs", logs, height=300)
-
-# 🤖 LLM ANALYSIS
 with tab3:
     st.subheader("Analyze Logs with Gemini")
     if st.button("Run Gemini Analysis"):
@@ -51,8 +45,6 @@ Logs:
                 st.text_area("Gemini Output", response.text, height=300)
             except Exception as e:
                 st.error(f"Gemini error: {str(e)}")
-
-# 🛠 MANUAL REMEDIATION
 with tab4:
     st.subheader("Manual Remediation")
     container = st.text_input("Container name (Docker)")
